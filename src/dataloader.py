@@ -115,7 +115,7 @@ class ColligatePotentialDataset(Dataset):
 
     def __getitem__(self, idx):
         '''
-        Returns a tensor of the player's college stats, NLF Combine stats, school, and Madden rating in that order.
+        Returns a tensor of the player's college stats, school, NLF Combine stats, and Madden rating in that order.
         If include_combine is False, only returns college stats, school, and Madden rating in that order.
         '''
         items = []
@@ -129,12 +129,12 @@ class ColligatePotentialDataset(Dataset):
         padded_college_stats = np.append(padding, flat_college_stats)
         items.append(torch.tensor(padded_college_stats, dtype=torch.float))
 
+        school = self.schools.loc[player].values
+        items.append(torch.tensor(school, dtype=torch.float))
+
         if self.include_combine:
             combine_stats = self.combine_stats.loc[player].values
             items.append(torch.tensor(combine_stats, dtype=torch.float))
-
-        school = self.schools.loc[player].values
-        items.append(torch.tensor(school, dtype=torch.float))
 
         madden_rating = self.madden_stats.loc[player]['Overall']
         items.append(torch.tensor(madden_rating, dtype=torch.float))

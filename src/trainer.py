@@ -6,9 +6,9 @@ from dataloader import ColligatePotentialDataset
 from model import SkillPredictor
 
 
-def train():
+def train(type, include_combine):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = ColligatePotentialDataset('passing', include_combine=True)
+    dataset = ColligatePotentialDataset(type, include_combine)
 
     batch_size = 1
     train_split = 0.8
@@ -23,30 +23,50 @@ def train():
     test_loader = DataLoader(test_dataset)
 
     example = dataset[0]
-    model = SkillPredictor(example[0].shape[-1], example[2].shape[-1], example[1].shape[-1]).to(device)
+    model = SkillPredictor(example[0].shape[-1], example[1].shape[-1], example[2].shape[-1]).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = nn.MSELoss()
-
+    best_loss = float('inf')
     for epoch in range(max_epochs):
         print(epoch)
-        for college_stats, combine_stats, school_encoding, madden_rating in train_loader:
-            college_stats, combine_stats, school_encoding, madden_rating = college_stats.to(device), combine_stats.to(device), school_encoding.to(device), madden_rating.to(device)
+        for stats in train_loader:
+            stats = [stat.to(device) for stat in stats]
             optimizer.zero_grad()
-            predictions = model(college_stats, combine_stats, school_encoding)
-            loss = criterion(predictions, madden_rating)
+            predictions = model(*stats[:3])
+            loss = criterion(predictions, stats[-1])
             loss.backward()
             optimizer.step()
 
         with torch.set_grad_enabled(False):
             mse_loss = 0
-            for college_stats, combine_stats, school_encoding, madden_rating in test_loader:
-                college_stats, combine_stats, school_encoding, madden_rating = college_stats.to(device), combine_stats.to(device), school_encoding.to(device), madden_rating.to(device)
-                predictions = model(college_stats, combine_stats, school_encoding)
-                loss = criterion(predictions, madden_rating)
+            for stats in test_loader:
+                stats = [stat.to(device) for stat in stats]
+                predictions = model(*stats[:3])
+                loss = criterion(predictions, stats[-1])
                 mse_loss += loss
-            print(f'Avg MSE Loss: {mse_loss / len(test_loader)}')
+            mse_loss /= len(test_loader)
+            if mse_loss < best_loss:
+                best_loss = mse_loss
+                torch.save(model.state_dict(), f'../models/{type}_model_combine={include_combine}.pt')
+            print(f'Avg MSE Loss: {mse_loss}')
+    print(f'Best MSE Loss: {best_loss}')
+
+def predict(player, type, include_combine):
+    dataset = ColligatePotentialDataset(type, include_combine)
+    player_index = dataset.players.get_loc(player)
+    player_stats = dataset[player_index]
+    example = dataset[0]
+    model = SkillPredictor(example[0].shape[-1], example[1].shape[-1], example[2].shape[-1])
+    model.load_state_dict(torch.load(f'../models/{type}_model_combine={include_combine}.pt'))
+    predictions = model(*player_stats[:3])
+    truth = player_stats[-1]
+    print(f'Predictions: {predictions}')
+    print(f'Truth: {truth}')
 
 
 if __name__ == '__main__':
-    train()
+    type = 'passing'
+    include_combine = True
+    # train(type, include_combine)
+    predict('Aaron Rodgers', type, include_combine)

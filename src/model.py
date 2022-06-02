@@ -19,11 +19,10 @@ class SkillPredictor(nn.Module):
         self.layer3 = nn.Linear(32, 1)
 
     
-    def forward(self, college_stats, combine_stats, school_encoding):
+    def forward(self, college_stats, school_encoding, combine_stats = None):
         school_score = self.school_output_layer(torch.sigmoid(self.school_hidden_layer(school_encoding)))
-        x = torch.cat((school_score, college_stats, combine_stats), dim = 1)
-        # nomalize x
-        x = x / torch.norm(x, p = 2, dim = 1).unsqueeze(1)
+        x = torch.cat((school_score, college_stats, combine_stats), dim = -1)
+        x = x / torch.norm(x, p = 2, dim = -1).unsqueeze(-1)
         x = torch.relu(self.layer1(x))
         x = torch.relu(self.layer2(x))
         x = torch.relu(self.layer3(x))
