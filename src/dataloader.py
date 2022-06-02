@@ -24,9 +24,11 @@ def _load_player_stats(type):
     df = pd.read_csv(f'../data/college-stats/college_{type}_stats.csv')
     df.drop_duplicates(subset=['Player', 'Year'], keep=False, inplace=True)
     df.set_index('Player', inplace=True)
-    df = df[df.index.value_counts().lt(5)]
+    v = df.index.value_counts()
+    df = df[df.index.isin(v.index[v.lt(5)])]
     schools = pd.get_dummies(df['School'])
     df.drop(columns=['Conf', 'Year', 'School'], inplace=True)
+    df.fillna(df.median(), inplace=True)
     return df, schools
 
 
@@ -40,6 +42,7 @@ def _load_combine_stats(type):
     df.drop_duplicates(subset=['Player'], keep=False, inplace=True)
     df.set_index('Player', inplace=True)
     df.drop(columns=['Year', 'Pos', 'School', 'Team', 'Round', 'Pick', 'Draftyear'], inplace=True)
+    df.fillna(df.median(), inplace=True)
     return df
 
 
@@ -76,9 +79,9 @@ def _get_players(college_stats, madden_stats, combine_stats = None):
     Returns an Index of players who appear in all datasets
     '''
     players = college_stats.index
-    players &= madden_stats.index
+    players = players.intersection(madden_stats.index)
     if combine_stats is not None:
-        players &= combine_stats.index
+        players = players.intersection(combine_stats.index)
     return players.unique()
 
 
@@ -102,7 +105,7 @@ class ColligatePotentialDataset(Dataset):
         self.players = _get_players(*stats)
 
         self.college_stats = all_college_stats.loc[self.players]
-        self.schools = all_schools.loc[self.players].drop_duplicates().groupby(['Player']).sum()
+        self.schools = all_schools.loc[self.players].reset_index().drop_duplicates().groupby(['Player']).sum()
         self.madden_stats = all_madden_stats.loc[self.players]
         if include_combine:
             self.combine_stats = all_combine_stats.loc[self.players]
@@ -120,20 +123,20 @@ class ColligatePotentialDataset(Dataset):
         player = self.players[idx]
 
         college_stats = self.college_stats.loc[player].values
-        four_season_length = 4 * len(college_stats[0])
+        four_season_length = 4 * college_stats.shape[-1]
         flat_college_stats = college_stats.flatten()
         padding = np.zeros(four_season_length - len(flat_college_stats))
         padded_college_stats = np.append(padding, flat_college_stats)
-        items.append(torch.tensor(padded_college_stats))
+        items.append(torch.tensor(padded_college_stats, dtype=torch.float))
 
         if self.include_combine:
             combine_stats = self.combine_stats.loc[player].values
-            items.append(torch.tensor(combine_stats))
+            items.append(torch.tensor(combine_stats, dtype=torch.float))
 
         school = self.schools.loc[player].values
-        items.append(torch.tensor(school))
+        items.append(torch.tensor(school, dtype=torch.float))
 
         madden_rating = self.madden_stats.loc[player]['Overall']
-        items.append(torch.tensor(madden_rating))
+        items.append(torch.tensor(madden_rating, dtype=torch.float))
         
         return items
