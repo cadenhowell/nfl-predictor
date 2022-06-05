@@ -110,6 +110,10 @@ class ColligatePotentialDataset(Dataset):
         if include_combine:
             self.combine_stats = all_combine_stats.loc[self.players]
 
+    def get_player_stats(self, player):
+        player_index = self.players.get_loc(player)
+        return self[player_index]
+
     def __len__(self):
         return len(self.players)
 
@@ -118,25 +122,26 @@ class ColligatePotentialDataset(Dataset):
         Returns a tensor of the player's college stats, school, NLF Combine stats, and Madden rating in that order.
         If include_combine is False, only returns college stats, school, and Madden rating in that order.
         '''
-        items = []
-
         player = self.players[idx]
 
+        features = {}
         college_stats = self.college_stats.loc[player].values
         four_season_length = 4 * college_stats.shape[-1]
         flat_college_stats = college_stats.flatten()
         padding = np.zeros(four_season_length - len(flat_college_stats))
         padded_college_stats = np.append(padding, flat_college_stats)
-        items.append(torch.tensor(padded_college_stats, dtype=torch.float))
+        features['college_stats'] = torch.tensor(padded_college_stats, dtype=torch.float)
 
         school = self.schools.loc[player].values
-        items.append(torch.tensor(school, dtype=torch.float))
+        features['school_encoding'] = torch.tensor(school, dtype=torch.float)
 
         if self.include_combine:
             combine_stats = self.combine_stats.loc[player].values
-            items.append(torch.tensor(combine_stats, dtype=torch.float))
+            features['combine_stats'] = torch.tensor(combine_stats, dtype=torch.float)
+        
+        items = {'features': features}
 
-        madden_rating = self.madden_stats.loc[player]['Overall']
-        items.append(torch.tensor(madden_rating, dtype=torch.float))
+        madden_rating = int(self.madden_stats.loc[player]['Overall'])
+        items['labels'] = torch.tensor(madden_rating, dtype=torch.float)
         
         return items

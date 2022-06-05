@@ -1,5 +1,20 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+def create_model(dataset):
+    '''
+    Given a dataset, extracts feature sizes to create a model.
+    '''
+    example = dataset[0]['features']
+    stats = [example['college_stats'], example['school_encoding']]
+    if dataset.include_combine:
+        stats.append(example['combine_stats'])
+    sizes = map(lambda stat: stat.shape[-1], stats)
+    model = SkillPredictor(*sizes)
+    return model
+
 
 class SkillPredictor(nn.Module):
 
@@ -7,23 +22,32 @@ class SkillPredictor(nn.Module):
         super().__init__()
         self.college_stats_size = college_stats_size
         self.schools_size = schools_size
-        self.combine_stats_size = combine_stats_size
+        self.combine_stats_size = 0 if combine_stats_size is None else combine_stats_size
 
-        self.school_hidden_size = 32
-        self.school_output_size = 1
-        self.school_hidden_layer = nn.Linear(self.schools_size, self.school_hidden_size)
-        self.school_output_layer = nn.Linear(self.school_hidden_size, self.school_output_size)
+        school_output_size = 1
+        self.school_model = nn.Sequential(
+            nn.Linear(self.schools_size, 16),
+            nn.ReLU(),
+            nn.Linear(16, school_output_size),
+            nn.ReLU()
+        )
 
-        self.layer1 = nn.Linear(self.school_output_size + college_stats_size + combine_stats_size, 64)
-        self.layer2 = nn.Linear(64, 32)
-        self.layer3 = nn.Linear(32, 1)
+        main_input_size = self.college_stats_size + self.combine_stats_size + school_output_size
+        self.prediction_model = nn.Sequential(
+            nn.Linear(main_input_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
+        )
 
     
-    def forward(self, college_stats, school_encoding, combine_stats = None):
-        school_score = self.school_output_layer(torch.sigmoid(self.school_hidden_layer(school_encoding)))
-        x = torch.cat((school_score, college_stats, combine_stats), dim = -1)
-        x = x / torch.norm(x, p = 2, dim = -1).unsqueeze(-1)
-        x = torch.relu(self.layer1(x))
-        x = torch.relu(self.layer2(x))
-        x = torch.relu(self.layer3(x))
-        return x
+    def forward(self, **kwargs):
+        school_score = self.school_model(kwargs['school_encoding'])
+        x = torch.cat((school_score, kwargs['college_stats']), dim=-1)
+        if 'combine_stats' in kwargs:
+            x = torch.cat((x, kwargs['combine_stats']), dim=-1)
+        x = F.normalize(x, p = 2, dim = -1)
+        return self.prediction_model(x)
