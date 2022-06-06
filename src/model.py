@@ -33,14 +33,11 @@ class SkillPredictor(nn.Module):
         )
 
         main_input_size = self.college_stats_size + self.combine_stats_size + school_output_size
+        layer1_size = 2 * main_input_size // 3
         self.prediction_model = nn.Sequential(
-            nn.Linear(main_input_size, 512),
+            nn.Linear(main_input_size, layer1_size),
             nn.ReLU(),
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Linear(layer1_size, 1)
         )
 
     

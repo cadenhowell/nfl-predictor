@@ -119,8 +119,8 @@ class ColligatePotentialDataset(Dataset):
 
     def __getitem__(self, idx):
         '''
-        Returns a tensor of the player's college stats, school, NLF Combine stats, and Madden rating in that order.
-        If include_combine is False, only returns college stats, school, and Madden rating in that order.
+        Returns a tensor of the player's college stats, school, NLF Combine stats, and Madden rating in dictionary.
+        If include_combine is False, only returns college stats, school, and Madden rating.
         '''
         player = self.players[idx]
 
